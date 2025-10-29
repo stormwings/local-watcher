@@ -1,0 +1,46 @@
+{
+  "name": "watcher-electron",
+  "version": "0.1.0",
+  "description": "App that polls MySQL and POSTs changes",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development electron .",
+    "pack": "electron-builder --dir",
+    "build:win": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "mysql2": "^3.15.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.example.mysqlwatcher",
+    "productName": "Watcher",
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/*.test.*"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
