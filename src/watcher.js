@@ -30,19 +30,38 @@ function createWatcher(opts) {
     SOURCE_TAG = "mysql-legacy",
     DRY_RUN = "0",
     CHARSET = "latin1",
+    HASH_COLUMNS = "precio_mayor",
+    SCAN_PAGE_SIZE = "500",
+    SCAN_EVERY_N_POLLS = "3",
   } = env;
 
   if (!TABLE_NAME || !PK_COLUMN || !API_URL) {
     throw new Error("Missing required env: TABLE_NAME, PK_COLUMN, API_URL");
   }
 
+  const updatedAtCol = String(UPDATED_AT_COLUMN || "").trim();
+  const hasUpdatedAt = updatedAtCol.length > 0;
+
   const stateFile = path.join(userDataDir, "state.json");
 
   function loadState() {
     try {
-      return JSON.parse(fs.readFileSync(stateFile, "utf8"));
+      const s = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+      return {
+        lastTs: s.lastTs ?? null,
+        lastId: Number.isFinite(s.lastId) ? s.lastId : 0,
+        hashesById: s.hashesById ?? {},
+        scanFromId: Number.isFinite(s.scanFromId) ? s.scanFromId : 0,
+        pollCounter: Number.isFinite(s.pollCounter) ? s.pollCounter : 0,
+      };
     } catch {
-      return { lastTs: null, lastId: 0 };
+      return {
+        lastTs: null,
+        lastId: 0,
+        hashesById: {},
+        scanFromId: 0,
+        pollCounter: 0,
+      };
     }
   }
 
@@ -58,6 +77,33 @@ function createWatcher(opts) {
       .digest("hex");
   }
 
+  const hashCols = (HASH_COLUMNS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  function normalizeDecimal(v, digits = 2) {
+    if (v === null || v === undefined || v === "") return "";
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    return n.toFixed(digits);
+  }
+
+  function normalizeValue(col, v) {
+    if (col === "precio_mayor") return normalizeDecimal(v, 2);
+    if (v === null || v === undefined) return "";
+    if (typeof v === "number") return Number.isFinite(v) ? String(v) : "";
+    if (typeof v === "boolean") return v ? "1" : "0";
+    return String(v);
+  }
+
+  function rowHash(row) {
+    const obj = {};
+    for (const c of hashCols) obj[c] = normalizeValue(c, row[c]);
+    const json = JSON.stringify(obj, Object.keys(obj).sort());
+    return crypto.createHash("sha256").update(json, "utf8").digest("hex");
+  }
+
   let pool = null;
   let timer = null;
   let busy = false;
@@ -70,7 +116,7 @@ function createWatcher(opts) {
     lastId: state.lastId,
     table: TABLE_NAME,
     pk: PK_COLUMN,
-    updatedAtCol: UPDATED_AT_COLUMN || null,
+    updatedAtCol: hasUpdatedAt ? updatedAtCol : null,
     intervalMs: Number(POLL_INTERVAL_MS),
   });
 
@@ -95,12 +141,134 @@ function createWatcher(opts) {
   }
 
   async function initStateIfNeeded() {
-    if (!state.lastTs && UPDATED_AT_COLUMN) {
+    if (!state.lastTs && hasUpdatedAt) {
       const [r] = await pool.query("SELECT NOW() AS now");
       state.lastTs =
         r?.[0]?.now || new Date().toISOString().slice(0, 19).replace("T", " ");
       saveState(state);
     }
+  }
+
+  async function postChange(eventType, row, eventIdHint) {
+    const payload = {
+      eventType,
+      occurredAt: hasUpdatedAt
+        ? new Date(row[updatedAtCol]).toISOString()
+        : new Date().toISOString(),
+      source: SOURCE_TAG,
+      table: TABLE_NAME,
+      primaryKey: { [PK_COLUMN]: row[PK_COLUMN] },
+      data: row,
+    };
+    const body = JSON.stringify(payload);
+    const eventId = eventIdHint;
+    if (DRY_RUN === "1") {
+      log(`(dry-run) POST -> ${eventId}`);
+      return;
+    }
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Event-Id": eventId,
+        ...(API_SECRET ? { "X-Signature": hmac(body) } : {}),
+      },
+      body,
+    });
+    if (![200, 202, 409].includes(res.status)) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`POST failed [${res.status}] ${text.slice(0, 300)}`);
+    }
+    log(`POST ok ${res.status} -> ${eventId}`);
+  }
+
+  async function pollUpdatedAtMode() {
+    const [rows] = await pool.query(
+      `SELECT * FROM \`${TABLE_NAME}\`
+       WHERE \`${updatedAtCol}\` > ?
+       ORDER BY \`${updatedAtCol}\`, \`${PK_COLUMN}\`
+       LIMIT 500`,
+      [state.lastTs]
+    );
+    if (!rows.length) return;
+
+    for (const row of rows) {
+      const eventId = `${TABLE_NAME}:${row[PK_COLUMN]}:${row[updatedAtCol]}`;
+      await postChange("ROW_UPDATED", row, eventId);
+      state.lastTs = row[updatedAtCol];
+    }
+    saveState(state);
+  }
+
+  async function pollInsertOnlyAndScanMode() {
+    const [newRows] = await pool.query(
+      `SELECT * FROM \`${TABLE_NAME}\`
+       WHERE \`${PK_COLUMN}\` > ?
+       ORDER BY \`${PK_COLUMN}\`
+       LIMIT 500`,
+      [state.lastId]
+    );
+
+    if (newRows.length) {
+      for (const row of newRows) {
+        const id = Number(row[PK_COLUMN]) || state.lastId;
+        const h = rowHash(row);
+        state.hashesById[id] = h;
+        const eventId = `${TABLE_NAME}:${id}:ins`;
+        await postChange("ROW_INSERTED", row, eventId);
+        if (id > state.lastId) state.lastId = id;
+      }
+      saveState(state);
+    }
+
+    state.pollCounter = (state.pollCounter || 0) + 1;
+    const every = Math.max(1, Number(SCAN_EVERY_N_POLLS));
+    if (state.pollCounter % every !== 0) {
+      saveState(state);
+      return;
+    }
+
+    const pageSize = Math.max(1, Number(SCAN_PAGE_SIZE));
+    const [scanRows] = await pool.query(
+      `SELECT \`${PK_COLUMN}\`, \`precio_mayor\`
+       FROM \`${TABLE_NAME}\`
+       WHERE \`${PK_COLUMN}\` > ?
+       ORDER BY \`${PK_COLUMN}\`
+       LIMIT ${pageSize}`,
+      [state.scanFromId || 0]
+    );
+
+    if (!scanRows.length) {
+      state.scanFromId = 0;
+      saveState(state);
+      return;
+    }
+
+    let lastSeen = state.scanFromId || 0;
+    for (const r of scanRows) {
+      const id = Number(r[PK_COLUMN]) || 0;
+      const minimal = { precio_mayor: r.precio_mayor, [PK_COLUMN]: id };
+      const h = rowHash(minimal);
+      const prev = state.hashesById[id];
+
+      if (prev && prev !== h) {
+        const [[full]] = await pool.query(
+          `SELECT * FROM \`${TABLE_NAME}\` WHERE \`${PK_COLUMN}\` = ? LIMIT 1`,
+          [id]
+        );
+        const currentVal = normalizeValue("precio_mayor", full?.precio_mayor);
+        const eventId = `${TABLE_NAME}:${id}:precio_mayor:${currentVal}`;
+        await postChange("ROW_UPDATED", full, eventId);
+        state.hashesById[id] = h;
+      } else if (!prev && id <= state.lastId) {
+        state.hashesById[id] = h;
+      }
+
+      if (id > lastSeen) lastSeen = id;
+    }
+
+    state.scanFromId = lastSeen;
+    saveState(state);
   }
 
   async function poll() {
@@ -109,76 +277,11 @@ function createWatcher(opts) {
     try {
       await ensurePool();
       await initStateIfNeeded();
-
-      let rows = [];
-      if (UPDATED_AT_COLUMN) {
-        const [r] = await pool.query(
-          `SELECT * FROM \`${TABLE_NAME}\`
-           WHERE \`${UPDATED_AT_COLUMN}\` > ?
-           ORDER BY \`${UPDATED_AT_COLUMN}\`, \`${PK_COLUMN}\`
-           LIMIT 500`,
-          [state.lastTs]
-        );
-        rows = r;
+      if (hasUpdatedAt) {
+        await pollUpdatedAtMode();
       } else {
-        const [r] = await pool.query(
-          `SELECT * FROM \`${TABLE_NAME}\`
-           WHERE \`${PK_COLUMN}\` > ?
-           ORDER BY \`${PK_COLUMN}\`
-           LIMIT 500`,
-          [state.lastId]
-        );
-        rows = r;
+        await pollInsertOnlyAndScanMode();
       }
-
-      if (!rows.length) return;
-
-      for (const row of rows) {
-        const payload = {
-          eventType: UPDATED_AT_COLUMN ? "ROW_UPDATED" : "ROW_INSERTED",
-          occurredAt: UPDATED_AT_COLUMN
-            ? new Date(row[UPDATED_AT_COLUMN]).toISOString()
-            : new Date().toISOString(),
-          source: SOURCE_TAG,
-          table: TABLE_NAME,
-          primaryKey: { [PK_COLUMN]: row[PK_COLUMN] },
-          data: row,
-        };
-
-        const body = JSON.stringify(payload);
-        const eventId = `${TABLE_NAME}:${row[PK_COLUMN]}:${
-          UPDATED_AT_COLUMN ? row[UPDATED_AT_COLUMN] : "ins"
-        }`;
-
-        if (DRY_RUN === "1") {
-          log(`(dry-run) POST -> ${eventId}`);
-        } else {
-          const res = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Event-Id": eventId,
-              ...(API_SECRET ? { "X-Signature": hmac(body) } : {}),
-            },
-            body,
-          });
-          if (![200, 202, 409].includes(res.status)) {
-            const text = await res.text().catch(() => "");
-            throw new Error(
-              `POST failed [${res.status}] ${text.slice(0, 300)}`
-            );
-          }
-          log(`POST ok ${res.status} -> ${eventId}`);
-        }
-
-        if (UPDATED_AT_COLUMN) {
-          state.lastTs = row[UPDATED_AT_COLUMN];
-        } else {
-          const id = Number(row[PK_COLUMN]) || state.lastId;
-          if (id > state.lastId) state.lastId = id;
-        }
-      }
-      saveState(state);
     } catch (e) {
       err("poll error:", e.message);
       if (
