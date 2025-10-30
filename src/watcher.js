@@ -42,6 +42,26 @@ function createWatcher(opts) {
   const updatedAtCol = String(UPDATED_AT_COLUMN || "").trim();
   const hasUpdatedAt = updatedAtCol.length > 0;
 
+  const PRODUCT_COLUMNS = [
+    "id_articulo",
+    "codigo",
+    "descripcion",
+    "marca",
+    "precio_compra",
+    "precio_venta",
+    "precio_mayor",
+    "precio_dolar",
+    "precio_anterior",
+    "adicional",
+    "iva",
+    "dolarizado",
+    "cantidad",
+    "estado",
+    "porcentaje",
+    "codigo_barra",
+    "stock",
+  ];
+
   const stateFile = path.join(userDataDir, "state.json");
 
   function loadState() {
@@ -97,6 +117,20 @@ function createWatcher(opts) {
     return String(v);
   }
 
+  function toProductPayload(row) {
+    const out = {};
+    for (const col of PRODUCT_COLUMNS) {
+      if (Object.prototype.hasOwnProperty.call(row, col)) {
+        out[col] = row[col];
+      }
+    }
+    // ensure all PK is always included
+    if (!out[PK_COLUMN] && row[PK_COLUMN] !== undefined) {
+      out[PK_COLUMN] = row[PK_COLUMN];
+    }
+    return out;
+  }
+
   function rowHash(row) {
     const obj = {};
     for (const c of hashCols) obj[c] = normalizeValue(c, row[c]);
@@ -150,15 +184,16 @@ function createWatcher(opts) {
   }
 
   async function postChange(eventType, row, eventIdHint) {
+    const product = toProductPayload(row);
     const payload = {
       eventType,
-      occurredAt: hasUpdatedAt
-        ? new Date(row[updatedAtCol]).toISOString()
-        : new Date().toISOString(),
       source: SOURCE_TAG,
       table: TABLE_NAME,
       primaryKey: { [PK_COLUMN]: row[PK_COLUMN] },
-      data: row,
+      data: product,
+      occurredAt: hasUpdatedAt
+        ? new Date(row[updatedAtCol]).toISOString()
+        : new Date().toISOString(),
     };
     const body = JSON.stringify(payload);
     const eventId = eventIdHint;
