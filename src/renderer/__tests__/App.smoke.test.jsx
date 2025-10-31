@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import App from "../App.jsx";
 
 describe("App smoke test", () => {
-  const originalWatcher = window.watcher;
+  const realWatcher = window.watcher;
 
   const baseStatus = {
     running: false,
@@ -24,10 +24,15 @@ describe("App smoke test", () => {
 
   beforeEach(() => {
     statusMock = vi.fn().mockResolvedValue(baseStatus);
-    startMock = vi
-      .fn()
-      .mockResolvedValue({ ...baseStatus, running: true, lastId: 11 });
-    stopMock = vi.fn().mockResolvedValue({ ...baseStatus, running: false });
+    startMock = vi.fn().mockResolvedValue({
+      ...baseStatus,
+      running: true,
+      lastId: 11,
+    });
+    stopMock = vi.fn().mockResolvedValue({
+      ...baseStatus,
+      running: false,
+    });
     onLogMock = vi.fn().mockImplementation((cb) => {
       cb("App ready");
       cb("App ready");
@@ -47,7 +52,7 @@ describe("App smoke test", () => {
   });
 
   afterEach(() => {
-    window.watcher = originalWatcher;
+    window.watcher = realWatcher;
     vi.clearAllMocks();
   });
 
@@ -55,21 +60,19 @@ describe("App smoke test", () => {
     render(<App />);
 
     await waitFor(() => expect(statusMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/stopped/i)).toBeInTheDocument();
+
+    const stoppedBadges = screen.getAllByText(/stopped/i);
+    expect(stoppedBadges.length).toBeGreaterThan(0);
 
     const logEntries = screen.getAllByText(/App ready/i);
     expect(logEntries.length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
     await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.getByText(/running/i)).toBeInTheDocument()
-    );
+    expect(screen.getAllByText(/running/i).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: /stop/i }));
     await waitFor(() => expect(stopMock).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.getByText(/stopped/i)).toBeInTheDocument()
-    );
+    expect(screen.getAllByText(/stopped/i).length).toBeGreaterThan(0);
   });
 });

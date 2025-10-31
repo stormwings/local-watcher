@@ -1,7 +1,6 @@
 import { useWatcher } from "@/src/hooks/useWatcher";
 import Header from "@/src/components/Header";
 import StatusPanel from "@/src/components/StatusPanel";
-import HelpPanel from "@/src/components/HelpPanel";
 import LogsPanel from "@/src/components/LogsPanel";
 import SettingsPanel from "@/src/components/SettingsPanel";
 
@@ -16,66 +15,107 @@ function App() {
     bridgeAvailable,
   } = useWatcher();
 
-  const isRunning = Boolean(status.running);
-  const statusBadgeClass = isRunning
-    ? "ml-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-green-100 text-green-800"
-    : "ml-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-200 text-gray-800";
+  const badgeClass = status.running
+    ? "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+    : "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-5xl mx-auto p-6">
-        <Header />
+    <div className="app-shell">
+      <Header />
 
-        {!bridgeAvailable && (
-          <div className="mb-4 rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
-            Running without Electron bridge. Open the Electron app (not only the
-            Vite URL).
-          </div>
-        )}
+      <div className="page-width py-6 flex gap-6">
+        <div className="flex-1 flex flex-col gap-4">
+          {bridgeAvailable ? null : (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800">
+              Running without Electron bridge. Open the Electron app (not just
+              the Vite URL).
+            </div>
+          )}
 
-        <section className="flex items-center gap-3 mb-4">
-          <button
-            onClick={start}
-            type="button"
-            className="px-4 py-2 rounded-xl bg-brand-500 text-white hover:bg-brand-600"
-          >
-            Start
-          </button>
-          <button
-            onClick={stop}
-            type="button"
-            className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
-          >
-            Stop
-          </button>
-          <span
-            className={statusBadgeClass}
-            aria-label={isRunning ? "watcher running" : "watcher stopped"}
-          >
-            {isRunning ? "running" : "stopped"}
-          </span>
-          <button
-            onClick={openStateDir}
-            type="button"
-            className="ml-auto text-sm underline"
-          >
-            Open state folder
-          </button>
-        </section>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              <button
+                onClick={start}
+                className="px-4 py-2 rounded-xl bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition"
+              >
+                Start
+              </button>
+              <button
+                onClick={stop}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition"
+              >
+                Stop
+              </button>
+            </div>
+            <span className={badgeClass}>
+              {status.running ? "running" : "stopped"}
+            </span>
+            <button
+              onClick={openStateDir}
+              className="ml-auto text-xs underline text-slate-500 hover:text-slate-700"
+            >
+              Open state folder
+            </button>
+          </div>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="md:col-span-1">
-            <StatusPanel status={status} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1">
+              <StatusPanel status={status} />
+            </div>
+            <div className="lg:col-span-1">
+              <SettingsPanel onTest={testConnection} />
+            </div>
           </div>
-          <div className="md:col-span-1">
-            <HelpPanel />
-          </div>
-          <div className="md:col-span-1">
-            <SettingsPanel onTest={testConnection} />
-          </div>
-        </section>
 
-        <LogsPanel logs={logs} />
+          <LogsPanel logs={logs} />
+        </div>
+
+        <aside className="w-[320px] hidden xl:block">
+          <div className="sticky top-20 bg-white rounded-2xl shadow-sheet border border-slate-100 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Current status
+              </h2>
+              <span className={badgeClass}>
+                {status.running ? "running" : "stopped"}
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 pb-2 border-b border-slate-100">
+              Table <span className="font-mono">{status.table || "-"}</span>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Primary key</span>
+                <span className="font-mono text-slate-900">
+                  {status.pk || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Interval</span>
+                <span className="font-mono text-slate-900">
+                  {status.intervalMs} ms
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Last ID</span>
+                <span className="font-mono text-slate-900">
+                  {status.lastId ?? "—"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Last timestamp</span>
+                <span className="font-mono text-right max-w-[140px] truncate">
+                  {status.lastTs ?? "—"}
+                </span>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[11px] text-slate-400">
+                Tip: keep this panel open while you monitor the MySQL table.
+              </p>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
