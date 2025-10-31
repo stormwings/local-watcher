@@ -1,4 +1,6 @@
 /node_modules
 /src/renderer/node_modules
+/coverage
+/src/renderer/coverage
 /dist
 .env
