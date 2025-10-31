@@ -22,11 +22,24 @@ if (isDev) {
 
 let mainWindow;
 let watcher;
+let logFilePath = null;
+
+function appendLogToFile(line) {
+  if (!logFilePath) return;
+  const ts = new Date().toISOString();
+  const finalLine = `[${ts}] ${line}\n`;
+  try {
+    fs.appendFileSync(logFilePath, finalLine, "utf8");
+  } catch {
+    // don't crash the app if logging fails
+  }
+}
 
 function emitLog(line) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("watcher:log", line);
   }
+  appendLogToFile(line);
 }
 
 function createMainWindow() {
@@ -73,9 +86,13 @@ if (!gotLock) {
   app.whenReady().then(() => {
     createMainWindow();
 
+    const userDataDir = app.getPath("userData");
+    logFilePath = path.join(userDataDir, "watcher.log");
+    appendLogToFile("=== watcher app started ===");
+
     watcher = createWatcher({
       appName: app.getName(),
-      userDataDir: app.getPath("userData"),
+      userDataDir,
       env: process.env,
       onLog: (line) => emitLog(line),
       onError: (line) => emitLog(`[ERROR] ${line}`),
@@ -98,6 +115,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", async () => {
   try {
     await watcher?.stop();
+    appendLogToFile("=== watcher app stopped ===");
   } catch {
     // ignore
   }
