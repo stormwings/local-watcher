@@ -224,6 +224,11 @@ function createWatcher({
       body,
     });
 
+    if (response.status === 404) {
+      log(`POST skipped (404 not found) -> ${eventId}`);
+      return;
+    }
+
     if (![200, 202, 409].includes(response.status)) {
       const text = await response.text().catch(() => "");
       throw new Error(`POST failed [${response.status}] ${text.slice(0, 300)}`);
