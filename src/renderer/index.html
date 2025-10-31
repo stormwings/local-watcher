@@ -1,95 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self';
-                 img-src 'self' data:;
-                 style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
-                 script-src 'self' https://cdn.tailwindcss.com;
-                 connect-src 'self' *;"
-    />
+    <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Watcher</title>
-    <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body class="bg-gray-50 text-gray-900">
-    <div class="max-w-5xl mx-auto p-6">
-      <header class="mb-6">
-        <h1 class="text-3xl font-bold tracking-tight">Watcher</h1>
-      </header>
-
-      <section class="flex items-center gap-3 mb-4">
-        <button
-          id="btnStart"
-          class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
-        >
-          Start
-        </button>
-        <button
-          id="btnStop"
-          class="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
-        >
-          Stop
-        </button>
-        <span
-          id="badge"
-          class="ml-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-200 text-gray-800"
-          >stopped</span
-        >
-        <button id="btnOpenState" class="ml-auto text-sm underline">
-          Open state folder
-        </button>
-      </section>
-
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div class="p-4 bg-white rounded-xl ring-1 ring-gray-200">
-          <h2 class="font-medium mb-2">Status</h2>
-          <dl class="text-sm space-y-1" id="status">
-            <div>
-              <dt class="inline text-gray-500">Table:</dt>
-              <dd class="inline font-mono" id="stTable">-</dd>
-            </div>
-            <div>
-              <dt class="inline text-gray-500">Primary key:</dt>
-              <dd class="inline font-mono" id="stPk">-</dd>
-            </div>
-            <div>
-              <dt class="inline text-gray-500">Updated-at column:</dt>
-              <dd class="inline font-mono" id="stUpd">-</dd>
-            </div>
-            <div>
-              <dt class="inline text-gray-500">Interval:</dt>
-              <dd class="inline font-mono" id="stInt">-</dd>
-            </div>
-            <div>
-              <dt class="inline text-gray-500">Last timestamp:</dt>
-              <dd class="inline font-mono" id="stLastTs">-</dd>
-            </div>
-            <div>
-              <dt class="inline text-gray-500">Last ID:</dt>
-              <dd class="inline font-mono" id="stLastId">-</dd>
-            </div>
-          </dl>
-        </div>
-        <div class="p-4 bg-white rounded-xl ring-1 ring-gray-200">
-          <h2 class="font-medium mb-2">Help</h2>
-          <ul class="text-sm list-disc pl-4 space-y-1">
-            <li>Use <code>DRY_RUN=1</code> to avoid sending POST requests</li>
-          </ul>
-        </div>
-      </section>
-
-      <section class="p-4 bg-white rounded-xl ring-1 ring-gray-200">
-        <h2 class="font-medium mb-3">Logs</h2>
-        <div
-          id="logs"
-          class="h-72 overflow-auto font-mono text-sm bg-gray-50 p-2 rounded border border-gray-200"
-        ></div>
-      </section>
-    </div>
-
-    <script src="./renderer.js"></script>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.jsx"></script>
   </body>
 </html>

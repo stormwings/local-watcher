@@ -5,25 +5,60 @@
   "main": "src/main.js",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=development electron .",
+    "dev:renderer": "vite",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev": "npm-run-all -p dev:renderer dev:electron",
+    "build:renderer": "vite build",
+    "build:electron": "electron-builder --win nsis",
+    "build": "npm-run-all build:renderer build:electron",
     "pack": "electron-builder --dir",
-    "build:win": "electron-builder --win nsis"
+    "test": "vitest",
+    "test:renderer": "vitest --run",
+    "test:node": "vitest --config vitest.node.config.js --run",
+    "test:all": "npm run test:renderer && npm run test:node",
+    "test:ci": "npm run test:renderer -- --coverage && npm run test:node -- --coverage",
+    "coverage:renderer": "npm run test:renderer -- --coverage",
+    "coverage:node": "npm run test:node -- --coverage",
+    "coverage:open": "npx vite preview || true"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
     "mysql2": "^3.15.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.0.5",
+    "autoprefixer": "^10.4.21",
     "cross-env": "^10.1.0",
     "electron": "^39.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.38.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-vitest": "^0.5.4",
+    "jsdom": "^27.1.0",
+    "npm-run-all": "^4.1.5",
+    "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^3.4.18",
+    "vite": "^5.3.0",
+    "vitest": "^4.0.5"
   },
   "build": {
     "appId": "com.example.mysqlwatcher",
     "productName": "Watcher",
     "files": [
       "src/**/*",
+      "dist/renderer/**/*",
       "package.json",
       "!**/*.map",
       "!**/*.test.*"

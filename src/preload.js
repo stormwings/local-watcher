@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("watcher", {
   stop: () => ipcRenderer.invoke("watcher:stop"),
   status: () => ipcRenderer.invoke("watcher:status"),
   openStateDir: () => ipcRenderer.invoke("watcher:openStateDir"),
+  testConnection: () => ipcRenderer.invoke("watcher:testConnection"),
   onLog: (cb) => {
     const handler = (_e, line) => cb(line);
     ipcRenderer.on("watcher:log", handler);
